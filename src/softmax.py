@@ -104,11 +104,11 @@ def adam(alpha, beta_1, beta_2, samples, theta_list):
     m = np.zeros(len(theta_total))
     v = np.zeros(len(theta_total))
     counter = 0
-    iterationMax = 5
+    iterationMax = 200
     eps = 1.0e-8
     error_limit = 1.0e-3
     theta_total_updated = theta_total
-    ofile = open("theta_record.txt", "w")
+    #ofile = open("theta_record.txt", "w")
     while(counter < iterationMax):
         counter += 1
         g = gradient_total(samples, theta_list)
@@ -119,14 +119,31 @@ def adam(alpha, beta_1, beta_2, samples, theta_list):
         theta_total_updated = theta_total - alpha*m/(np.sqrt(v) + eps)
         theta_list = break_theta(theta_total_updated, feature_length)
         #ofile.write(";".join(map(lambda theta: ",".join(map(str, theta)), theta_list[1:])) + "\n")
-        ofile.write(",".join(map(str, theta_list[-1])) + "\n")
+        #ofile.write(",".join(map(str, theta_list[-1])) + "\n")
         gradient_norm = np.linalg.norm(g)
         error = np.linalg.norm(theta_total - theta_total_updated)
         print "Iteration_counter = ", counter, ", norm of gradient = ", gradient_norm, ", error = ", error
         theta_total = theta_total_updated
         if (error < error_limit):
             break
+    #ofile.close()
+    return theta_list
+
+def print_theta(theta_list, theta_file_name):
+    ofile = open(theta_file_name, "w")
+    for theta in theta_list:
+        ofile.write(",".join(map(str, theta)) + "\n")
     ofile.close()
+
+def read_theta(theta_file_name):
+    import os
+    assert(os.path.exists(theta_file_name))
+    theta_list = []
+    ifile = open(theta_file_name, "r")
+    for (index, string) in enumerate(ifile):
+        theta = np.asarray(map(float, string.strip("\n").split(",")))
+        theta_list.append(theta)
+    ifile.close()
     return theta_list
 
 def probability(sample, theta_list):
@@ -172,14 +189,29 @@ def print_dictionary(dictionary):
     for key in keys:
         print key, dictionary[key]
 
-def main():
-    import sys
-    if (len(sys.argv) != 2):
-        print "trainFileName = sys.argv[1]. "
-        return -1
-    
-    trainFileName = sys.argv[1]
-    print "Reading train file ... "
+def cross_validation(test_file_name, theta_file_name):
+    print "Reading " + test_file_name
+    samples = read_data(test_file_name)
+    print "File reading finished."
+    theta_list = read_theta(theta_file_name)
+    ofile = open("cross_valition_results.txt", "w")
+    correct_predictions = 0
+    for sample in samples:
+        p = probability(sample, theta_list)
+        predicted_label = np.argmax(p)
+        label = sample.y
+        ofile.write(str(predicted_label) + "," + str(label) + "\n")
+        if (label == predicted_label):
+            correct_predictions += 1
+        else:
+            print label, p
+    ofile.write("accuracy = " + str(float(correct_predictions)/float(len(samples))) + "\n")
+    ofile.close()
+
+def train_model(trainFileName):
+    import os
+    assert(os.path.exists(trainFileName))
+    print "Reading " + trainFileName
     samples = read_data(trainFileName)
     print "File reading finished. "
     theta_list = []
@@ -197,10 +229,25 @@ def main():
     beta_1 = 0.9
     beta_2 = 0.999
     theta_list_updated = adam(alpha, beta_1, beta_2, samples, theta_list)
-    p = probability(samples[0], theta_list_updated)
-    for i in range(len(p)):
-        print i, p[i]
-    print "label = " + str(samples[0].y)
+    print_theta(theta_list_updated, "theta_final.txt")
+
+def main():
+    import sys
+    import os
+
+    if (len(sys.argv) != 3):
+        print "dataFileName = sys.argv[1], trainRatio = sys.argv[2]. "
+        return -1
+
+    dataFileName = sys.argv[1]
+    trainRatio = float(sys.argv[2])
+    assert(trainRatio > 0 and trainRatio < 1)
+    print "Splitting the input file ... "
+    os.system("python split.py " + dataFileName + " " + str(trainRatio))
+
+    train_model("train.csv")
+    cross_validation("test.csv", "theta_final.txt")
+
     return 0
 
 if __name__ == "__main__":
